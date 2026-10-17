@@ -25,6 +25,7 @@ clang -fobjc-arc \
       -framework IMSharedUtilities \
       -lsqlite3 \
       -I. \
+      Sources/*.m \
       main.m \
       -o "$OUTPUT"
 
