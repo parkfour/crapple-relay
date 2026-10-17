@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.crapple.imessage-relay</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/imessage-relay</string>
+        <string>--port</string>
+        <string>5569</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/usr/local/var/imessage-relay</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>RELAY_AUTH_TOKEN</key>
+        <string>your-secure-token-here</string>
+        <key>WEBHOOK_URL</key>
+        <string>http://127.0.0.1:5569/receive-imessage</string>
+        <key>WEBHOOK_AUTH_TOKEN</key>
+        <string>your-secure-token-here</string>
+    </dict>
+</dict>
+</plist>

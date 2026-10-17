@@ -1,0 +1,155 @@
+#import <Foundation/Foundation.h>
+#import <IMCore/IMCore.h>
+
+@interface IMDaemonController : NSObject
+{
+    id _delegate;
+    IMRemoteObject<IMRemoteDaemonProtocol> * _remoteObject;
+    NSMutableDictionary * _listenerMap;
+    IMLocalObject * _localObject;
+    IMDaemonListener * _daemonListener;
+    NSMutableArray * _services;
+    NSProtocolChecker * _protocol;
+    NSString * _listenerID;
+    NSObject<OS_dispatch_queue> * _listenerLockQueue;
+    {os_unfair_recursive_lock_s="ourl_lock"{os_unfair_lock_s="_os_unfair_lock_opaque"I}"ourl_count"I} _remoteDaemonLock;
+    NSObject<OS_dispatch_queue> * _localObjectLockQueue;
+    NSObject<OS_dispatch_queue> * _remoteMessageQueue;
+    NSObject<OS_dispatch_queue> * _daemonConnectionQueue;
+    NSRecursiveLock * _connectionLock;
+    NSArray * _servicesToAllow;
+    NSArray * _servicesToDeny;
+    {__CFRunLoopSource=} * _runLoopSource;
+    NSLock * _blockingLock;
+    BOOL _hasCheckedForDaemon;
+    BOOL _preventReconnect;
+    BOOL _inBlockingConnect;
+    BOOL _acquiringDaemonConnection;
+    BOOL _autoReconnect;
+    BOOL _blocksConnectionAtResume;
+    BOOL _hasBeenSuspended;
+    unsigned int _gMyFZListenerCapabilities;
+    unsigned int _cachedCapabilities;
+    unsigned int _lastUpdatedCapabilities;
+    BOOL _requestingConnection;
+    <IMRemoteDaemonProtocol> * _synchronousReplyingRemoteDaemon;
+    <IMRemoteDaemonProtocol> * _replyingRemoteDaemon;
+    IMDaemonQueryController * _queryController;
+    NSMutableDictionary * _requestQOSClassCompletionBlocks;
+    id /* block */ _prewarmingBlock;
+}
+
+// Properties
+@property (copy, nonatomic, readwrite) id /* block */prewarmingBlock;
+@property (nonatomic, readwrite) BOOL_blocksConnectionAtResume;
+@property (readonly, nonatomic) <IMRemoteDaemonProtocol> *replyingRemoteDaemon;
+@property (readonly, nonatomic) <IMRemoteDaemonProtocol> *synchronousReplyingRemoteDaemon;
+@property (readonly, nonatomic) BOOLisConnected;
+@property (readonly, nonatomic) BOOLisConnecting;
+@property (readonly, nonatomic) BOOLrequestingConnection;
+@property (readonly, nonatomic) IMDaemonListener *listener;
+@property (readonly, nonatomic) IMDaemonQueryController *queryController;
+@property (readonly, nonatomic) NSObject<OS_dispatch_queue> *_remoteMessageQueue;
+@property (readonly, nonatomic) unsigned intcapabilities;
+@property (readwrite) BOOL_autoReconnect;
+@property (readwrite) unsigned int_capabilities;
+@property (strong, nonatomic, readwrite) NSMutableDictionary *requestQOSClassCompletionBlocks;
+@property (strong, nonatomic, readwrite) NSString *_listenerID;
+@property (strong, readwrite) NSArray *_servicesToAllow;
+@property (strong, readwrite) NSArray *_servicesToDeny;
+@property (weak, nonatomic, readwrite) iddelegate;
+
+// Class Methods
++ (BOOL)_applicationWillTerminate;
++ (id)sharedController;
++ (id)sharedInstance;
++ (void)_blockUntilSendQueueIsEmpty;
++ (void)_setApplicationWillTerminate;
+
+// Instance Methods
+- (BOOL)__isLocalObjectValidOnQueue:(id)arg1;
+- (BOOL)__isRemoteObjectValid;
+- (BOOL)_acquiringDaemonConnection;
+- (BOOL)_autoReconnect;
+- (BOOL)_blocksConnectionAtResume;
+- (BOOL)_makeConnectionWithLaunch:(BOOL)arg1 completionBlock:(id)arg2;
+- (BOOL)addListenerID:(id)arg1 capabilities:(unsigned int)arg2;
+- (BOOL)connectToDaemon;
+- (BOOL)connectToDaemonWithLaunch:(BOOL)arg1 capabilities:(unsigned int)arg2 blockUntilConnected:(BOOL)arg3;
+- (BOOL)connectToDaemonWithLaunch:(BOOL)arg1;
+- (BOOL)consumeQueryContext:(id)arg1;
+- (BOOL)hasListenerForID:(id)arg1;
+- (BOOL)isConnected;
+- (BOOL)isConnecting;
+- (BOOL)isRequestingConnection;
+- (BOOL)localObjectExists;
+- (BOOL)remoteObjectExists;
+- (BOOL)removeListenerID:(id)arg1;
+- (BOOL)setCapabilities:(unsigned int)arg1 forListenerID:(id)arg2;
+- (double)_connectionTimeout;
+- (id)_listenerID;
+- (id)_remoteMessageQueue;
+- (id)_remoteObject;
+- (id)_servicesToAllow;
+- (id)_servicesToDeny;
+- (id)delegate;
+- (id)init;
+- (id)listener;
+- (id)methodSignatureForSelector:(SEL)arg1;
+- (id)prewarmingBlock;
+- (id)queryController;
+- (id)replyingRemoteDaemon;
+- (id)requestQOSClassCompletionBlocks;
+- (id)synchronousReplyingRemoteDaemon;
+- (unsigned int)_capabilities;
+- (unsigned int)capabilities;
+- (unsigned int)capabilitiesForListenerID:(id)arg1;
+- (void).cxx_destruct;
+- (void)__setCapabilities:(unsigned int)arg1;
+- (void)_addressBookChanged:(id)arg1;
+- (void)_agentDidLaunchNotification:(id)arg1;
+- (void)_blockUntilSendQueueIsEmpty;
+- (void)_connectToDaemonWithLaunch:(BOOL)arg1 capabilities:(unsigned int)arg2;
+- (void)_disconnectFromDaemonWithForce:(BOOL)arg1;
+- (void)_handleDaemonException:(id)arg1;
+- (void)_handleReceivedQOSClassWhileServicingRequestsNotification:(id)arg1;
+- (void)_listenerSetUpdated;
+- (void)_localObjectCleanup;
+- (void)_noteSetupComplete;
+- (void)_remoteObjectCleanup;
+- (void)_setAutoReconnect:(BOOL)arg1;
+- (void)_setBlocksConnectionAtResume:(BOOL)arg1;
+- (void)_setCapabilities:(unsigned int)arg1;
+- (void)_setListenerID:(id)arg1;
+- (void)_setServicesToAllow:(id)arg1;
+- (void)_setServicesToDeny:(id)arg1;
+- (void)blockUntilConnected;
+- (void)dealloc;
+- (void)disconnectFromDaemon;
+- (void)disconnectFromDaemonWithForce:(BOOL)arg1;
+- (void)forwardInvocation:(id)arg1;
+- (void)killDaemon;
+- (void)listener:(id)arg1 setListenerCapabilities:(unsigned int)arg2;
+- (void)listener:(id)arg1 setValue:(id)arg2 ofPersistentProperty:(id)arg3;
+- (void)listener:(id)arg1 setValue:(id)arg2 ofProperty:(id)arg3;
+- (void)localObjectDiedNotification:(id)arg1;
+- (void)remoteObjectDiedNotification:(id)arg1;
+- (void)requestQOSClassOfAgentWhileServicingRequests:(id)arg1;
+- (void)sendABInformationToDaemon;
+- (void)sendQueryWithReply:(BOOL)arg1 query:(id)arg2;
+- (void)setDaemonLogsOutWithoutStatusListeners:(BOOL)arg1;
+- (void)setDaemonTerminatesWithoutListeners:(BOOL)arg1;
+- (void)setDelegate:(id)arg1;
+- (void)setMyPicture:(id)arg1 smallPictureData:(id)arg2;
+- (void)setMyStatus:(NSUInteger)arg1 message:(id)arg2 forAccount:(id)arg3;
+- (void)setMyStatus:(NSUInteger)arg1 message:(id)arg2;
+- (void)setPrewarmingBlock:(id)arg1;
+- (void)setQueryContext:(id)arg1;
+- (void)setRequestQOSClassCompletionBlocks:(id)arg1;
+- (void)systemApplicationDidEnterBackground;
+- (void)systemApplicationDidResume;
+- (void)systemApplicationDidSuspend;
+- (void)systemApplicationWillEnterForeground;
+- (void)unsetQueryContext:(id)arg1;
+
+@end

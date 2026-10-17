@@ -1,0 +1,23 @@
+# Binaries and compiled outputs
+imessage-relay
+Extracted_IMCore_12/
+*.o
+*.a
+*.dylib
+*.so
+
+# Log files
+*.log
+*.err
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor and temporary files
+*.tmp
+*.swp
+*~
+.vscode/
+.idea/
