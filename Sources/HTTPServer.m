@@ -10,6 +10,14 @@
 #import <unistd.h>
 #import <sqlite3.h>
 
+#ifndef RELAY_VERSION
+#define RELAY_VERSION "v0.1.0"
+#endif
+
+#ifndef RELAY_COMMIT_HASH
+#define RELAY_COMMIT_HASH "unknown"
+#endif
+
 @interface HTTPServer ()
 @property (nonatomic, assign) int serverFd;
 @property (nonatomic, strong) dispatch_source_t listenSource;
@@ -17,6 +25,34 @@
 @end
 
 @implementation HTTPServer
+
++ (NSString *)relayVersion {
+    return [NSString stringWithUTF8String:RELAY_VERSION];
+}
+
++ (NSString *)relayGitCommit {
+    NSString *baked = [NSString stringWithUTF8String:RELAY_COMMIT_HASH];
+    if (baked.length > 0 && ![baked isEqualToString:@"unknown"]) {
+        return baked;
+    }
+    NSTask *task = [[NSTask alloc] init];
+    task.launchPath = @"/usr/bin/git";
+    task.arguments = @[@"rev-parse", @"HEAD"];
+    NSPipe *pipe = [NSPipe pipe];
+    task.standardOutput = pipe;
+    task.standardError = [NSPipe pipe];
+    @try {
+        [task launch];
+        [task waitUntilExit];
+        NSData *data = [[pipe fileHandleForReading] readDataToEndOfFile];
+        NSString *outStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        outStr = [outStr stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (outStr.length > 0) {
+            return outStr;
+        }
+    } @catch (NSException *e) {}
+    return @"unknown";
+}
 
 + (NSString *)resolveDefaultIP {
     struct ifaddrs *interfaces = NULL;
@@ -290,6 +326,8 @@
         } else if ([method isEqualToString:@"GET"] && ([path isEqualToString:@"/help"] || [path isEqualToString:@"/info"])) {
             [self sendJSONResponse:@{
                 @"service": @"crapple-relay-12",
+                @"version": [HTTPServer relayVersion],
+                @"commit": [HTTPServer relayGitCommit],
                 @"status": @"online",
                 @"endpoints": @[@"GET /status", @"GET /chats", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
                 @"spec_file": @"~/gateway.txt"
@@ -591,10 +629,16 @@
     IMDaemonController *dc = [IMDaemonController sharedController];
     IMAccount *activeIMessage = [mgr bestSendingAccount];
     
+    NSString *versionStr = [HTTPServer relayVersion];
+    NSString *commitStr = [HTTPServer relayGitCommit];
+    
     NSDictionary *status = @{
         @"status": @"online",
         @"daemon_name": @"crapple-relay-12",
-        @"version": @"macOS 12.7.6 (Monterey)",
+        @"version": versionStr,
+        @"commit": commitStr,
+        @"git_commit": commitStr,
+        @"os_version": @"macOS 12.7.6 (Monterey)",
         @"security": @{
             @"bound_host": self.host,
             @"incoming_port": @(self.port),

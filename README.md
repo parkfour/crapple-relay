@@ -1,4 +1,4 @@
-# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`)
+# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`) `v0.1.0`
 
 A high-performance, bidirectional native daemon designed specifically for macOS 12.7.x (Monterey). It links directly against Apple's private `IMCore`, `IMFoundation`, and `IMSharedUtilities` frameworks to provide a headless HTTP REST API and real-time webhook bridge for iMessage and SMS.
 
@@ -280,11 +280,59 @@ Sends a reaction to an existing message or removes a previously sent reaction.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/status` | Returns daemon health, active Apple ID / iMessage account status, listener IDs. |
+| `GET` | `/status` | Returns daemon health, version (`v0.1.0`), commit hash, active Apple ID / iMessage account status, listener IDs. |
 | `GET` | `/chats` | Returns all known chat conversations, identifiers, and participants. |
 | `GET` | `/accounts` | Lists registered accounts (iMessage and SMS) and connection state. |
+| `GET` | `/help` | Lists available endpoints, service metadata, version, and commit hash. |
 | `POST`| `/retry-webhook` | Re-queries the newest incoming message from `chat.db` and dispatches it to the webhook. |
 | `POST`| `/test-webhook` | Dispatches a synthetic test payload to verify gateway connectivity. |
+
+#### Example: Daemon Status (`GET /status`)
+```json
+{
+  "status": "online",
+  "daemon_name": "crapple-relay-12",
+  "version": "v0.1.0",
+  "commit": "974449e4918f2dc212b0169b1a1d501915286b67",
+  "git_commit": "974449e4918f2dc212b0169b1a1d501915286b67",
+  "os_version": "macOS 12.7.6 (Monterey)",
+  "incoming_observer_active": true,
+  "daemon_connected": true,
+  "listener_id": "crapple-relay-listener",
+  "security": {
+    "bound_host": "10.0.0.2",
+    "incoming_port": 5569,
+    "auth_type": "Bearer Token"
+  },
+  "outgoing_webhook": {
+    "url": "http://10.0.0.1:5569/receive-imessage",
+    "default_port": 5569,
+    "auth_configured": 1
+  },
+  "imessage_account": {
+    "login": "E:user@example.com",
+    "service": "iMessage",
+    "connected": true,
+    "uniqueID": "35EE8FA3-77B6-4788-8A2E-EF97D27A775B"
+  },
+  "active_accounts_count": 2,
+  "total_chats": 3,
+  "accounts": [
+    {
+      "login": "E:user@example.com",
+      "service": "iMessage",
+      "connected": true,
+      "uniqueID": "35EE8FA3-77B6-4788-8A2E-EF97D27A775B"
+    },
+    {
+      "login": "E:",
+      "service": "SMS",
+      "connected": true,
+      "uniqueID": "6F913F03-BCF0-4ABE-A9E4-B95C06B4D1A4"
+    }
+  ]
+}
+```
 
 ---
 

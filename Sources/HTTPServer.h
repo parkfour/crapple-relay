@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly) BOOL isRunning;
 
 + (NSString *)resolveDefaultIP;
++ (NSString *)relayVersion;
++ (NSString *)relayGitCommit;
 
 - (instancetype)initWithHost:(nullable NSString *)host
                         port:(int)port

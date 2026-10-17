@@ -10,14 +10,18 @@ echo "=================================================="
 
 OUTPUT="imessage-relay"
 ENTITLEMENTS="entitlements.plist"
+VERSION="v0.1.0"
+GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 
 # 1. Compile directly linking IMCore and IMFoundation frameworks
-echo "[+] Compiling native daemon with clang (ARC enabled)..."
+echo "[+] Compiling native daemon with clang (version $VERSION, commit $GIT_COMMIT)..."
 clang -fobjc-arc \
       -fno-modules \
       -O2 \
       -Wall \
       -Wno-deprecated-declarations \
+      -DRELAY_VERSION="\"$VERSION\"" \
+      -DRELAY_COMMIT_HASH="\"$GIT_COMMIT\"" \
       -F/System/Library/PrivateFrameworks \
       -framework Foundation \
       -framework IMCore \
