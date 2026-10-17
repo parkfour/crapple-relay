@@ -69,7 +69,7 @@ int main(int argc, const char * argv[]) {
         
         NSLog(@"==================================================");
         NSLog(@" macOS 12.7 (Monterey) Native iMessage Relay Daemon");
-        NSLog(@" Version: %@ | Commit: %@", [HTTPServer relayVersion], [HTTPServer relayGitCommit]);
+        NSLog(@" Relay Version: %@", [HTTPServer formattedRelayVersion]);
         NSLog(@" Default Ports: Incoming %d, Outgoing Webhook 5569", port);
         NSLog(@" Network Bind: %@ | Bearer Auth: Active", host);
         NSLog(@"==================================================");

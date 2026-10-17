@@ -280,10 +280,10 @@ Sends a reaction to an existing message or removes a previously sent reaction.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/status` | Returns daemon health, version (`v0.1.0`), commit hash, active Apple ID / iMessage account status, listener IDs. |
+| `GET` | `/status` | Returns daemon health, OS version, relay version (`v0.1.0-<commit>`), active Apple ID / iMessage account status, listener IDs. |
 | `GET` | `/chats` | Returns all known chat conversations, identifiers, and participants. |
 | `GET` | `/accounts` | Lists registered accounts (iMessage and SMS) and connection state. |
-| `GET` | `/help` | Lists available endpoints, service metadata, version, and commit hash. |
+| `GET` | `/help` | Lists available endpoints, service metadata, and relay version. |
 | `POST`| `/retry-webhook` | Re-queries the newest incoming message from `chat.db` and dispatches it to the webhook. |
 | `POST`| `/test-webhook` | Dispatches a synthetic test payload to verify gateway connectivity. |
 
@@ -292,9 +292,10 @@ Sends a reaction to an existing message or removes a previously sent reaction.
 {
   "status": "online",
   "daemon_name": "crapple-relay-12",
-  "version": "v0.1.0",
-  "commit": "974449e4918f2dc212b0169b1a1d501915286b67",
-  "git_commit": "974449e4918f2dc212b0169b1a1d501915286b67",
+  "version": "macOS 12.7.6 (Monterey)",
+  "relay_version": "v0.1.0-6377fced",
+  "commit": "6377fced1291793eaf41556a26d8bcefdca56002",
+  "git_commit": "6377fced1291793eaf41556a26d8bcefdca56002",
   "os_version": "macOS 12.7.6 (Monterey)",
   "incoming_observer_active": true,
   "daemon_connected": true,

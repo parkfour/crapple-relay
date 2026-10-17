@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)resolveDefaultIP;
 + (NSString *)relayVersion;
 + (NSString *)relayGitCommit;
++ (NSString *)formattedRelayVersion;
 
 - (instancetype)initWithHost:(nullable NSString *)host
                         port:(int)port

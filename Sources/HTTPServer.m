@@ -54,6 +54,13 @@
     return @"unknown";
 }
 
++ (NSString *)formattedRelayVersion {
+    NSString *ver = [self relayVersion];
+    NSString *commit = [self relayGitCommit];
+    NSString *shortCommit = commit.length >= 8 ? [commit substringToIndex:8] : commit;
+    return [NSString stringWithFormat:@"%@-%@", ver, shortCommit];
+}
+
 + (NSString *)resolveDefaultIP {
     struct ifaddrs *interfaces = NULL;
     NSString *detectedIP = nil;
@@ -326,7 +333,8 @@
         } else if ([method isEqualToString:@"GET"] && ([path isEqualToString:@"/help"] || [path isEqualToString:@"/info"])) {
             [self sendJSONResponse:@{
                 @"service": @"crapple-relay-12",
-                @"version": [HTTPServer relayVersion],
+                @"version": @"macOS 12.7.6 (Monterey)",
+                @"relay_version": [HTTPServer formattedRelayVersion],
                 @"commit": [HTTPServer relayGitCommit],
                 @"status": @"online",
                 @"endpoints": @[@"GET /status", @"GET /chats", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
@@ -629,13 +637,13 @@
     IMDaemonController *dc = [IMDaemonController sharedController];
     IMAccount *activeIMessage = [mgr bestSendingAccount];
     
-    NSString *versionStr = [HTTPServer relayVersion];
     NSString *commitStr = [HTTPServer relayGitCommit];
     
     NSDictionary *status = @{
         @"status": @"online",
         @"daemon_name": @"crapple-relay-12",
-        @"version": versionStr,
+        @"version": @"macOS 12.7.6 (Monterey)",
+        @"relay_version": [HTTPServer formattedRelayVersion],
         @"commit": commitStr,
         @"git_commit": commitStr,
         @"os_version": @"macOS 12.7.6 (Monterey)",
