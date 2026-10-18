@@ -1,6 +1,7 @@
 #import "IMServiceManager.h"
 #import "RelayLogger.h"
 #import <sys/stat.h>
+#import <sqlite3.h>
 
 @implementation IMServiceManager
 
@@ -124,15 +125,109 @@
         NSString *recip = ([chat respondsToSelector:@selector(recipient)] && chat.recipient) ? (chat.recipient.ID ?: @"") : @"";
         NSString *lastHandle = [chat respondsToSelector:@selector(lastAddressedHandleID)] ? ([chat lastAddressedHandleID] ?: @"") : @"";
         
+        BOOL isGroup = NO;
+        if ([chat respondsToSelector:@selector(isGroupChat)]) {
+            isGroup = [chat isGroupChat];
+        }
+        if (!isGroup && ([guid containsString:@";+;"] || [ident hasPrefix:@"chat"])) {
+            isGroup = YES;
+        }
+        
+        NSArray<NSString *> *participants = [self participantsForChat:chat chatIdentifier:ident chatGUID:guid];
+        if (participants.count == 0 && recip.length > 0) {
+            participants = @[recip];
+        }
+        
         [chatList addObject:@{
             @"guid": guid,
             @"identifier": ident,
+            @"is_group": @(isGroup),
+            @"group_chat_id": isGroup ? ident : @"",
             @"displayName": dispName,
+            @"group_name": dispName,
             @"recipient": recip,
+            @"participants": participants ?: @[],
             @"last_addressed_handle": lastHandle
         }];
     }
     return chatList;
+}
+
+- (NSArray<NSString *> *)participantsForChat:(nullable IMChat *)chat
+                              chatIdentifier:(nullable NSString *)chatIdent
+                                    chatGUID:(nullable NSString *)chatGUID {
+    NSMutableOrderedSet<NSString *> *set = [NSMutableOrderedSet orderedSet];
+    
+    // 1. Check IMChat participantHandleIDs
+    if (chat && [chat respondsToSelector:@selector(participantHandleIDs)]) {
+        id hIDs = [chat participantHandleIDs];
+        if ([hIDs isKindOfClass:[NSArray class]]) {
+            for (id item in (NSArray *)hIDs) {
+                if ([item isKindOfClass:[NSString class]] && [(NSString *)item length] > 0) {
+                    [set addObject:(NSString *)item];
+                }
+            }
+        }
+    }
+    
+    // 2. Check IMChat participants array of IMHandle
+    if (chat && [chat respondsToSelector:@selector(participants)]) {
+        id handles = [chat participants];
+        if ([handles isKindOfClass:[NSArray class]]) {
+            for (id h in (NSArray *)handles) {
+                if ([h respondsToSelector:@selector(ID)]) {
+                    NSString *hid = [h ID];
+                    if (hid.length > 0) [set addObject:hid];
+                }
+            }
+        }
+    }
+    
+    // 3. Query SQLite chat.db for canonical participants (including inactive members like 8404)
+    NSArray<NSString *> *dbParticipants = [self participantsFromDatabaseForChatIdentifier:chatIdent chatGUID:chatGUID];
+    for (NSString *p in dbParticipants) {
+        if (p.length > 0) {
+            [set addObject:p];
+        }
+    }
+    
+    return [set array];
+}
+
+- (NSArray<NSString *> *)participantsFromDatabaseForChatIdentifier:(nullable NSString *)chatIdent
+                                                          chatGUID:(nullable NSString *)chatGUID {
+    NSString *dbPath = [@"~/Library/Messages/chat.db" stringByExpandingTildeInPath];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:dbPath]) return @[];
+    
+    sqlite3 *db = NULL;
+    NSString *uri = [NSString stringWithFormat:@"file:%@?mode=ro", dbPath];
+    if (sqlite3_open_v2([uri UTF8String], &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, NULL) != SQLITE_OK) {
+        if (db) sqlite3_close(db);
+        return @[];
+    }
+    
+    NSMutableArray *results = [NSMutableArray array];
+    const char *query = "SELECT DISTINCT h.id FROM chat_handle_join chj "
+                        "JOIN handle h ON chj.handle_id = h.ROWID "
+                        "JOIN chat c ON chj.chat_id = c.ROWID "
+                        "WHERE c.chat_identifier = ? OR c.guid = ? "
+                        "ORDER BY h.ROWID ASC";
+    
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db, query, -1, &stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(stmt, 1, chatIdent ? [chatIdent UTF8String] : "", -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 2, chatGUID ? [chatGUID UTF8String] : "", -1, SQLITE_TRANSIENT);
+        
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            const char *handleIdC = (const char *)sqlite3_column_text(stmt, 0);
+            if (handleIdC) {
+                [results addObject:[NSString stringWithUTF8String:handleIdC]];
+            }
+        }
+        sqlite3_finalize(stmt);
+    }
+    sqlite3_close(db);
+    return results;
 }
 
 - (NSUInteger)totalChatsCount {

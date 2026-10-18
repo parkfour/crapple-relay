@@ -20,6 +20,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable IMChat *)resolveChatForRecipient:(nullable NSString *)recipient
                                     chatGUID:(nullable NSString *)chatGUID;
 - (NSArray<NSDictionary *> *)allChatsInfoList;
+- (NSArray<NSString *> *)participantsForChat:(nullable IMChat *)chat
+                              chatIdentifier:(nullable NSString *)chatIdentifier
+                                    chatGUID:(nullable NSString *)chatGUID;
 - (NSUInteger)totalChatsCount;
 
 /// Outbound messaging

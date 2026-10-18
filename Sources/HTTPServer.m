@@ -340,11 +340,13 @@
                 @"os_version": @"macOS 12.7.6 (Monterey)",
                 @"commit": [HTTPServer relayGitCommit],
                 @"status": @"online",
-                @"endpoints": @[@"GET /status", @"GET /ping", @"GET /chats", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
+                @"endpoints": @[@"GET /status", @"GET /ping", @"GET /chats", @"GET /chat", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
                 @"spec_file": @"~/gateway.txt"
             } statusCode:200 clientFd:clientFd];
         } else if ([method isEqualToString:@"GET"] && [path isEqualToString:@"/chats"]) {
             [self handleChatsRequest:clientFd];
+        } else if ([method isEqualToString:@"GET"] && ([path isEqualToString:@"/chat"] || [uri hasPrefix:@"/chat?"])) {
+            [self handleChatDetailRequestWithURI:uri clientFd:clientFd];
         } else if ([method isEqualToString:@"GET"] && [path isEqualToString:@"/accounts"]) {
             [self handleAccountsRequest:clientFd];
         } else {
@@ -375,8 +377,8 @@
         return;
     }
     
-    NSString *recipient = json[@"recipient"] ?: json[@"to"] ?: json[@"sender"] ?: json[@"target"] ?: json[@"destination"];
-    NSString *chatGUID = json[@"chat_guid"] ?: json[@"chat_identifier"];
+    NSString *recipient = json[@"recipient"] ?: json[@"to"] ?: json[@"sender"] ?: json[@"target"] ?: json[@"destination"] ?: json[@"group_chat_id"];
+    NSString *chatGUID = json[@"chat_guid"] ?: json[@"chat_identifier"] ?: json[@"group_chat_id"];
     
     NSString *text = json[@"text"] ?: json[@"body"] ?: json[@"message"] ?: json[@"content"];
     NSString *subject = json[@"subject"];
@@ -695,6 +697,73 @@
     }
 }
 
+- (void)handleChatDetailRequestWithURI:(NSString *)uri clientFd:(int)clientFd {
+    @try {
+        NSString *targetID = @"";
+        if ([uri containsString:@"?"]) {
+            NSString *query = [uri substringFromIndex:[uri rangeOfString:@"?"].location + 1];
+            NSArray *params = [query componentsSeparatedByString:@"&"];
+            for (NSString *p in params) {
+                NSArray *kv = [p componentsSeparatedByString:@"="];
+                if (kv.count == 2) {
+                    NSString *k = [[kv[0] stringByRemovingPercentEncoding] lowercaseString];
+                    NSString *v = [kv[1] stringByRemovingPercentEncoding];
+                    if ([k isEqualToString:@"id"] || [k isEqualToString:@"identifier"] || [k isEqualToString:@"guid"] || [k isEqualToString:@"chat_identifier"]) {
+                        targetID = v;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        NSArray *chatList = [[IMServiceManager sharedInstance] allChatsInfoList];
+        NSDictionary *matched = nil;
+        
+        for (NSDictionary *chat in chatList) {
+            NSString *ident = chat[@"identifier"];
+            NSString *guid = chat[@"guid"];
+            if ([ident isEqualToString:targetID] || [guid isEqualToString:targetID]) {
+                matched = chat;
+                break;
+            }
+        }
+        
+        if (!matched && targetID.length > 0) {
+            IMChat *chatObj = [[IMServiceManager sharedInstance] resolveChatForRecipient:targetID chatGUID:targetID];
+            if (chatObj) {
+                NSString *guid = [chatObj respondsToSelector:@selector(guid)] ? (chatObj.guid ?: @"") : @"";
+                NSString *ident = [chatObj respondsToSelector:@selector(chatIdentifier)] ? (chatObj.chatIdentifier ?: @"") : @"";
+                NSString *dispName = [chatObj respondsToSelector:@selector(displayName)] ? (chatObj.displayName ?: @"") : @"";
+                NSString *recip = ([chatObj respondsToSelector:@selector(recipient)] && chatObj.recipient) ? (chatObj.recipient.ID ?: @"") : @"";
+                BOOL isGroup = NO;
+                if ([chatObj respondsToSelector:@selector(isGroupChat)]) isGroup = [chatObj isGroupChat];
+                if (!isGroup && ([guid containsString:@";+;"] || [ident hasPrefix:@"chat"])) isGroup = YES;
+                NSArray *parts = [[IMServiceManager sharedInstance] participantsForChat:chatObj chatIdentifier:ident chatGUID:guid];
+                
+                matched = @{
+                    @"guid": guid,
+                    @"identifier": ident,
+                    @"is_group": @(isGroup),
+                    @"group_chat_id": isGroup ? ident : @"",
+                    @"displayName": dispName,
+                    @"group_name": dispName,
+                    @"recipient": recip,
+                    @"participants": parts ?: @[]
+                };
+            }
+        }
+        
+        if (matched) {
+            [self sendJSONResponse:@{@"status": @"ok", @"chat": matched} statusCode:200 clientFd:clientFd];
+        } else {
+            [self sendJSONResponse:@{@"error": @"Chat not found", @"query_id": targetID ?: @""} statusCode:404 clientFd:clientFd];
+        }
+    } @catch (NSException *ex) {
+        NSLog(@"[ERROR] Exception in handleChatDetailRequest: %@", ex);
+        [self sendJSONResponse:@{@"error": @"Failed to query chat details", @"reason": ex.reason ?: @""} statusCode:500 clientFd:clientFd];
+    }
+}
+
 - (void)handleAccountsRequest:(int)clientFd {
     NSArray *accounts = [[IMServiceManager sharedInstance] accountsInfoList];
     [self sendJSONResponse:@{@"accounts": accounts, @"count": @(accounts.count)} statusCode:200 clientFd:clientFd];
@@ -711,8 +780,11 @@
     if (!payload || ![payload isKindOfClass:[NSDictionary class]]) {
         payload = @{
             @"sender": @"+15551234567",
+            @"group_chat_id": @"",
+            @"correspondent": @"+15551234567",
             @"from": @"+15551234567",
             @"participant": @"+15551234567",
+            @"participants": @[@"+15551234567"],
             @"is_group": @NO,
             @"chat_identifier": @"+15551234567",
             @"chat_guid": @"iMessage;-;+15551234567",

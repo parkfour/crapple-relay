@@ -166,6 +166,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)canSendMessage:(IMMessage *)message;
 - (void)startTyping;
 - (void)stopTyping;
+- (BOOL)isGroupChat;
+- (nullable NSArray<NSString *> *)participantHandleIDs;
 @end
 
 // ==========================================

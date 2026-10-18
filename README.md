@@ -158,8 +158,13 @@ When an external contact sends an iMessage or SMS to the Mac, the relay daemon i
   ```json
   {
     "sender": "+15551234567",
+    "group_chat_id": "",
+    "correspondent": "+15551234567",
     "from": "+15551234567",
     "participant": "+15551234567",
+    "participants": [
+      "+15551234567"
+    ],
     "is_group": false,
     "chat_identifier": "+15551234567",
     "chat_guid": "iMessage;-;+15551234567",
@@ -175,8 +180,16 @@ When an external contact sends an iMessage or SMS to the Mac, the relay daemon i
   ```json
   {
     "sender": "chat123456789012345678",
+    "group_chat_id": "chat123456789012345678",
+    "correspondent": "alice@example.com",
     "from": "alice@example.com",
     "participant": "alice@example.com",
+    "participants": [
+      "+15551234567",
+      "+15552345678",
+      "alice@example.com",
+      "+15553456789"
+    ],
     "is_group": true,
     "chat_identifier": "chat123456789012345678",
     "chat_guid": "iMessage;+;chat123456789012345678",
@@ -191,10 +204,13 @@ When an external contact sends an iMessage or SMS to the Mac, the relay daemon i
 - **Field Definitions:**
   | Field | Type | Description |
   |---|---|---|
-  | `sender` | string | Conversation routing identifier. For 1-on-1 chats, this is the remote sender handle (`+1...` or email). For group chats, this is the group ID (`chat...`), routing directly into the group conversation and ensuring replies target the group. |
-  | `from` | string | The individual author/participant handle who sent the message within the chat. |
-  | `participant` | string | Alias for `from`. |
-  | `is_group` | boolean | `true` for group chats, `false` for direct 1-on-1 chats. |
+  | `sender` | string | Conversation routing identifier. For 1-on-1 chats, this is the remote sender handle (`+1...` or email). For group chats, this is the group ID (`chat...`), routing directly into the group conversation and ensuring replies target the group without requiring artificial prefixes. |
+  | `group_chat_id` | string | Canonical group ID (`chat...`) for multi-party chats, or empty string `""` for 1-on-1 chats. |
+  | `correspondent` | string | The individual author/contact handle who sent the message within the chat. |
+  | `from` | string | Alias for `correspondent`. |
+  | `participant` | string | Alias for `correspondent`. |
+  | `participants` | array | Array of all member handles in the conversation roster, including contacts who have not yet spoken in the thread. |
+  | `is_group` | boolean | Explicit boolean flag: `true` for group chats, `false` for direct 1-on-1 chats. |
   | `chat_identifier` | string | Canonical conversation identifier (`chat...` or phone/email). |
   | `chat_guid` | string | IMCore chat GUID (`iMessage;+;chat...` for groups, `iMessage;-;...` for 1-on-1). |
   | `group_name` | string | Display name of the group if set, or `""` if unnamed. |

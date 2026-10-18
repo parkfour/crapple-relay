@@ -1,10 +1,7 @@
 #import "MessageObserver.h"
+#import "IMServiceManager.h"
 #import "RelayLogger.h"
 #import <sqlite3.h>
-
-@interface IMChat (RelayGroupDetection)
-- (BOOL)isGroupChat;
-@end
 
 @interface MessageObserver ()
 @property (nonatomic, assign) BOOL isRunning;
@@ -200,10 +197,21 @@
         }
     }
     
+    NSString *groupChatID = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : @"";
+    NSString *correspondent = fromHandle ?: @"";
+    
+    NSArray<NSString *> *participants = [[IMServiceManager sharedInstance] participantsForChat:chat chatIdentifier:chatIdentifier chatGUID:chatGUID];
+    if (participants.count == 0 && fromHandle.length > 0) {
+        participants = @[fromHandle];
+    }
+    
     NSDictionary *payload = @{
         @"sender": sender ?: @"",
+        @"group_chat_id": groupChatID ?: @"",
+        @"correspondent": correspondent ?: @"",
         @"from": fromHandle ?: @"",
         @"participant": fromHandle ?: @"",
+        @"participants": participants ?: @[],
         @"is_group": @(isGroup),
         @"chat_identifier": chatIdentifier ?: @"",
         @"chat_guid": chatGUID ?: @"",
@@ -340,10 +348,21 @@
                 }
             }
             
+            NSString *groupChatID = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : @"";
+            NSString *correspondent = fromHandle ?: @"";
+            
+            NSArray<NSString *> *participants = [[IMServiceManager sharedInstance] participantsForChat:nil chatIdentifier:chatIdentifier chatGUID:chatGUID];
+            if (participants.count == 0 && fromHandle.length > 0) {
+                participants = @[fromHandle];
+            }
+            
             NSDictionary *payload = @{
                 @"sender": sender ?: @"",
+                @"group_chat_id": groupChatID ?: @"",
+                @"correspondent": correspondent ?: @"",
                 @"from": fromHandle ?: @"",
                 @"participant": fromHandle ?: @"",
+                @"participants": participants ?: @[],
                 @"is_group": @(isGroup),
                 @"chat_identifier": chatIdentifier ?: @"",
                 @"chat_guid": chatGUID ?: @"",
@@ -483,10 +502,21 @@
                 else attachmentName = [filePath lastPathComponent] ?: @"";
             }
             
+            NSString *groupChatID = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : @"";
+            NSString *correspondent = fromHandle ?: @"";
+            
+            NSArray<NSString *> *participants = [[IMServiceManager sharedInstance] participantsForChat:nil chatIdentifier:chatIdentifier chatGUID:chatGUID];
+            if (participants.count == 0 && fromHandle.length > 0) {
+                participants = @[fromHandle];
+            }
+            
             payload = @{
                 @"sender": sender ?: @"",
+                @"group_chat_id": groupChatID ?: @"",
+                @"correspondent": correspondent ?: @"",
                 @"from": fromHandle ?: @"",
                 @"participant": fromHandle ?: @"",
+                @"participants": participants ?: @[],
                 @"is_group": @(isGroup),
                 @"chat_identifier": chatIdentifier ?: @"",
                 @"chat_guid": chatGUID ?: @"",
