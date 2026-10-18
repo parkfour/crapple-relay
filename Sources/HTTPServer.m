@@ -700,6 +700,12 @@
     if (!payload || ![payload isKindOfClass:[NSDictionary class]]) {
         payload = @{
             @"sender": @"+15551234567",
+            @"from": @"+15551234567",
+            @"participant": @"+15551234567",
+            @"is_group": @NO,
+            @"chat_identifier": @"+15551234567",
+            @"chat_guid": @"iMessage;-;+15551234567",
+            @"group_name": @"",
             @"message": @"Test incoming message via /test-webhook",
             @"attachment_base64": @"",
             @"attachment_mime": @"",

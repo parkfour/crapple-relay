@@ -2,6 +2,10 @@
 #import "RelayLogger.h"
 #import <sqlite3.h>
 
+@interface IMChat (RelayGroupDetection)
+- (BOOL)isGroupChat;
+@end
+
 @interface MessageObserver ()
 @property (nonatomic, assign) BOOL isRunning;
 @property (nonatomic, assign) int64_t lastProcessedRowID;
@@ -134,13 +138,35 @@
         [self.processedMessageGUIDs addObject:guid];
     }
     
-    // Sender identification
-    NSString *sender = message.sender.ID ?: message.sender.displayID ?: @"";
-    if (sender.length == 0 && chat && chat.recipient) {
-        sender = chat.recipient.ID ?: chat.recipient.normalizedID ?: @"";
+    // Participant / author identification
+    NSString *fromHandle = message.sender.ID ?: message.sender.displayID ?: @"";
+    if (fromHandle.length == 0 && chat && chat.recipient) {
+        fromHandle = chat.recipient.ID ?: chat.recipient.normalizedID ?: @"";
     }
-    if (sender.length == 0 && chat && chat.chatIdentifier) {
-        sender = chat.chatIdentifier;
+    
+    BOOL isGroup = NO;
+    NSString *chatIdentifier = @"";
+    NSString *chatGUID = @"";
+    NSString *groupName = @"";
+    
+    if (chat) {
+        if ([chat respondsToSelector:@selector(isGroupChat)]) {
+            isGroup = [chat isGroupChat];
+        }
+        chatIdentifier = chat.chatIdentifier ?: @"";
+        chatGUID = chat.guid ?: @"";
+        groupName = chat.displayName ?: @"";
+    }
+    
+    if (!isGroup && ([chatGUID containsString:@";+;"] || [chatIdentifier hasPrefix:@"chat"])) {
+        isGroup = YES;
+    }
+    
+    // For group messages: route under the group chat identifier (e.g. "chat123456789012345678")
+    // For 1-on-1: route under the remote contact handle (e.g. "+15551234567")
+    NSString *sender = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : fromHandle;
+    if (sender.length == 0) {
+        sender = chatIdentifier.length > 0 ? chatIdentifier : fromHandle;
     }
     
     // Message text body
@@ -176,14 +202,20 @@
     
     NSDictionary *payload = @{
         @"sender": sender ?: @"",
+        @"from": fromHandle ?: @"",
+        @"participant": fromHandle ?: @"",
+        @"is_group": @(isGroup),
+        @"chat_identifier": chatIdentifier ?: @"",
+        @"chat_guid": chatGUID ?: @"",
+        @"group_name": groupName ?: @"",
         @"message": body ?: @"",
         @"attachment_base64": attachmentBase64 ?: @"",
         @"attachment_mime": attachmentMime ?: @"",
         @"attachment_name": attachmentName ?: @""
     };
     
-    NSLog(@"[+] Captured incoming iMessage from '%@': '%@' (media: %@, %lu bytes base64)",
-          sender, body, attachmentName.length > 0 ? attachmentName : @"none", (unsigned long)attachmentBase64.length);
+    NSLog(@"[+] Captured incoming iMessage from '%@' in '%@' (is_group: %d): '%@' (media: %@, %lu bytes base64)",
+          fromHandle, sender, isGroup, body, attachmentName.length > 0 ? attachmentName : @"none", (unsigned long)attachmentBase64.length);
     
     [self dispatchWebhookWithPayload:payload];
 }
@@ -218,9 +250,12 @@
     }
     
     const char *query = "SELECT m.ROWID, m.guid, m.text, h.id, m.is_from_me, m.date, "
-                        "       att.filename, att.mime_type, att.transfer_name "
+                        "       att.filename, att.mime_type, att.transfer_name, "
+                        "       c.chat_identifier, c.guid, c.style, c.display_name, c.group_id "
                         "FROM message m "
                         "LEFT JOIN handle h ON m.handle_id = h.ROWID "
+                        "LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id "
+                        "LEFT JOIN chat c ON cmj.chat_id = c.ROWID "
                         "LEFT JOIN message_attachment_join maj ON m.ROWID = maj.message_id "
                         "LEFT JOIN attachment att ON maj.attachment_id = att.ROWID "
                         "WHERE m.ROWID > ? "
@@ -256,8 +291,28 @@
             text = [text stringByReplacingOccurrencesOfString:@"\uFFFC" withString:@""];
             text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             
-            const char *senderC = (const char *)sqlite3_column_text(stmt, 3);
-            NSString *sender = senderC ? [NSString stringWithUTF8String:senderC] : @"";
+            const char *fromC = (const char *)sqlite3_column_text(stmt, 3);
+            NSString *fromHandle = fromC ? [NSString stringWithUTF8String:fromC] : @"";
+            
+            const char *chatIdentC = (const char *)sqlite3_column_text(stmt, 9);
+            NSString *chatIdentifier = chatIdentC ? [NSString stringWithUTF8String:chatIdentC] : @"";
+            
+            const char *chatGuidC = (const char *)sqlite3_column_text(stmt, 10);
+            NSString *chatGUID = chatGuidC ? [NSString stringWithUTF8String:chatGuidC] : @"";
+            
+            int chatStyle = sqlite3_column_int(stmt, 11);
+            
+            const char *dispNameC = (const char *)sqlite3_column_text(stmt, 12);
+            NSString *groupName = dispNameC ? [NSString stringWithUTF8String:dispNameC] : @"";
+            
+            BOOL isGroup = (chatStyle == 43) || [chatGUID containsString:@";+;"] || [chatIdentifier hasPrefix:@"chat"];
+            
+            // For group messages: route under the group chat identifier (e.g. "chat123456789012345678")
+            // For 1-on-1: route under the remote contact handle (e.g. "+15551234567")
+            NSString *sender = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : fromHandle;
+            if (sender.length == 0) {
+                sender = chatIdentifier.length > 0 ? chatIdentifier : fromHandle;
+            }
             
             NSString *attachmentBase64 = @"";
             NSString *attachmentMime = @"";
@@ -287,14 +342,20 @@
             
             NSDictionary *payload = @{
                 @"sender": sender ?: @"",
+                @"from": fromHandle ?: @"",
+                @"participant": fromHandle ?: @"",
+                @"is_group": @(isGroup),
+                @"chat_identifier": chatIdentifier ?: @"",
+                @"chat_guid": chatGUID ?: @"",
+                @"group_name": groupName ?: @"",
                 @"message": text ?: @"",
                 @"attachment_base64": attachmentBase64 ?: @"",
                 @"attachment_mime": attachmentMime ?: @"",
                 @"attachment_name": attachmentName ?: @""
             };
             
-            NSLog(@"[+] [chat.db] Captured incoming iMessage (ROWID %lld, GUID %@) from '%@': '%@'",
-                  rowID, guid, sender, text);
+            NSLog(@"[+] [chat.db] Captured incoming iMessage (ROWID %lld, GUID %@) from '%@' in '%@' (is_group: %d): '%@'",
+                  rowID, guid, fromHandle, sender, isGroup, text);
             [self dispatchWebhookWithPayload:payload];
         }
         sqlite3_finalize(stmt);
@@ -328,7 +389,8 @@
     [req setHTTPBody:bodyData];
     [req setTimeoutInterval:10.0];
     
-    NSLog(@"[+] Dispatching webhook POST to %@ for sender '%@'...", self.webhookURL, payload[@"sender"]);
+    NSLog(@"[+] Dispatching webhook POST to %@ for sender '%@' (is_group: %d, from: '%@')...",
+          self.webhookURL, payload[@"sender"], [payload[@"is_group"] boolValue], payload[@"from"] ?: @"");
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) {
@@ -354,9 +416,12 @@
     }
     
     const char *query = "SELECT m.ROWID, m.guid, m.text, h.id, m.is_from_me, m.date, "
-                        "       att.filename, att.mime_type, att.transfer_name "
+                        "       att.filename, att.mime_type, att.transfer_name, "
+                        "       c.chat_identifier, c.guid, c.style, c.display_name, c.group_id "
                         "FROM message m "
                         "LEFT JOIN handle h ON m.handle_id = h.ROWID "
+                        "LEFT JOIN chat_message_join cmj ON m.ROWID = cmj.message_id "
+                        "LEFT JOIN chat c ON cmj.chat_id = c.ROWID "
                         "LEFT JOIN message_attachment_join maj ON m.ROWID = maj.message_id "
                         "LEFT JOIN attachment att ON maj.attachment_id = att.ROWID "
                         "WHERE m.is_from_me = 0 "
@@ -378,8 +443,26 @@
             text = [text stringByReplacingOccurrencesOfString:@"\uFFFC" withString:@""];
             text = [text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             
-            const char *senderC = (const char *)sqlite3_column_text(stmt, 3);
-            NSString *sender = senderC ? [NSString stringWithUTF8String:senderC] : @"";
+            const char *fromC = (const char *)sqlite3_column_text(stmt, 3);
+            NSString *fromHandle = fromC ? [NSString stringWithUTF8String:fromC] : @"";
+            
+            const char *chatIdentC = (const char *)sqlite3_column_text(stmt, 9);
+            NSString *chatIdentifier = chatIdentC ? [NSString stringWithUTF8String:chatIdentC] : @"";
+            
+            const char *chatGuidC = (const char *)sqlite3_column_text(stmt, 10);
+            NSString *chatGUID = chatGuidC ? [NSString stringWithUTF8String:chatGuidC] : @"";
+            
+            int chatStyle = sqlite3_column_int(stmt, 11);
+            
+            const char *dispNameC = (const char *)sqlite3_column_text(stmt, 12);
+            NSString *groupName = dispNameC ? [NSString stringWithUTF8String:dispNameC] : @"";
+            
+            BOOL isGroup = (chatStyle == 43) || [chatGUID containsString:@";+;"] || [chatIdentifier hasPrefix:@"chat"];
+            
+            NSString *sender = (isGroup && chatIdentifier.length > 0) ? chatIdentifier : fromHandle;
+            if (sender.length == 0) {
+                sender = chatIdentifier.length > 0 ? chatIdentifier : fromHandle;
+            }
             
             NSString *attachmentBase64 = @"";
             NSString *attachmentMime = @"";
@@ -402,6 +485,12 @@
             
             payload = @{
                 @"sender": sender ?: @"",
+                @"from": fromHandle ?: @"",
+                @"participant": fromHandle ?: @"",
+                @"is_group": @(isGroup),
+                @"chat_identifier": chatIdentifier ?: @"",
+                @"chat_guid": chatGUID ?: @"",
+                @"group_name": groupName ?: @"",
                 @"message": text ?: @"",
                 @"attachment_base64": attachmentBase64 ?: @"",
                 @"attachment_mime": attachmentMime ?: @"",

@@ -153,23 +153,55 @@ When an external contact sends an iMessage or SMS to the Mac, the relay daemon i
 - **Method:** `POST`
 - **Default URL:** `http://<GATEWAY_HOST>:<PORT>/receive-imessage`
 - **Payload Schema:**
+
+  **1-on-1 Message:**
   ```json
   {
     "sender": "+15551234567",
+    "from": "+15551234567",
+    "participant": "+15551234567",
+    "is_group": false,
+    "chat_identifier": "+15551234567",
+    "chat_guid": "iMessage;-;+15551234567",
+    "group_name": "",
     "message": "Hello from external contact!",
     "attachment_base64": "",
     "attachment_mime": "",
     "attachment_name": ""
   }
   ```
+
+  **Group Chat Message:**
+  ```json
+  {
+    "sender": "chat123456789012345678",
+    "from": "alice@example.com",
+    "participant": "alice@example.com",
+    "is_group": true,
+    "chat_identifier": "chat123456789012345678",
+    "chat_guid": "iMessage;+;chat123456789012345678",
+    "group_name": "Weekend Camping",
+    "message": "Sounds like a great plan! Looking forward to it.",
+    "attachment_base64": "",
+    "attachment_mime": "",
+    "attachment_name": ""
+  }
+  ```
+
 - **Field Definitions:**
   | Field | Type | Description |
   |---|---|---|
-  | `sender` | string | E.164 phone number (`+1...`) or Apple ID email address of the sender. |
-  | `message` | string | Plain-text body. If the message contains only media, this is an empty string `""` (`\uFFFC` placeholders are automatically stripped). |
+  | `sender` | string | Conversation routing identifier. For 1-on-1 chats, this is the remote sender handle (`+1...` or email). For group chats, this is the group ID (`chat...`), routing directly into the group conversation and ensuring replies target the group. |
+  | `from` | string | The individual author/participant handle who sent the message within the chat. |
+  | `participant` | string | Alias for `from`. |
+  | `is_group` | boolean | `true` for group chats, `false` for direct 1-on-1 chats. |
+  | `chat_identifier` | string | Canonical conversation identifier (`chat...` or phone/email). |
+  | `chat_guid` | string | IMCore chat GUID (`iMessage;+;chat...` for groups, `iMessage;-;...` for 1-on-1). |
+  | `group_name` | string | Display name of the group if set, or `""` if unnamed. |
+  | `message` | string | Plain-text body. If the message contains only media, this will be an empty string `""` (`\uFFFC` placeholders are automatically stripped). |
   | `attachment_base64` | string | Base64-encoded binary string if media is present, or `""` if text-only. |
-  | `attachment_mime` | string | MIME type (e.g. `image/jpeg`, `image/png`, `video/mp4`, `audio/mp4`). |
-  | `attachment_name` | string | Original filename (e.g. `photo.jpg`). |
+  | `attachment_mime` | string | MIME type (e.g. `image/jpeg`, `image/png`, `video/mp4`, `video/quicktime`). |
+  | `attachment_name` | string | Original filename (e.g. `photo.jpg`, `IMG_1234.mov`). |
 - **Expected Gateway Response:** HTTP `200 OK`.
 
 ---
