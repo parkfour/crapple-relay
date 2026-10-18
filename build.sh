@@ -10,7 +10,7 @@ echo "=================================================="
 
 OUTPUT="imessage-relay"
 ENTITLEMENTS="entitlements.plist"
-VERSION="v0.1.0"
+VERSION="v0.2.0"
 GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
 
 # 1. Compile directly linking IMCore and IMFoundation frameworks

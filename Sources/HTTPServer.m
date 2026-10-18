@@ -11,7 +11,7 @@
 #import <sqlite3.h>
 
 #ifndef RELAY_VERSION
-#define RELAY_VERSION "v0.1.0"
+#define RELAY_VERSION "v0.2.0"
 #endif
 
 #ifndef RELAY_COMMIT_HASH
@@ -328,16 +328,19 @@
             [self handleTestWebhookRequestWithBody:body clientFd:clientFd];
         } else if ([method isEqualToString:@"POST"] && ([path isEqualToString:@"/retry-webhook"] || [path isEqualToString:@"/api/retry-webhook"])) {
             [self handleRetryWebhookRequest:clientFd];
-        } else if ([method isEqualToString:@"GET"] && ([path isEqualToString:@"/status"] || [path isEqualToString:@"/"])) {
+        } else if (([method isEqualToString:@"GET"] || [method isEqualToString:@"POST"]) &&
+                   ([path isEqualToString:@"/status"] || [path isEqualToString:@"/"] || [path isEqualToString:@"/ping"] || [path isEqualToString:@"/health"] || [path isEqualToString:@"/api/status"] || [path isEqualToString:@"/api/ping"])) {
             [self handleStatusRequest:clientFd];
         } else if ([method isEqualToString:@"GET"] && ([path isEqualToString:@"/help"] || [path isEqualToString:@"/info"])) {
             [self sendJSONResponse:@{
                 @"service": @"crapple-relay-12",
-                @"version": @"macOS 12.7.6 (Monterey)",
+                @"version": [HTTPServer formattedRelayVersion],
                 @"relay_version": [HTTPServer formattedRelayVersion],
+                @"Relay version": [HTTPServer formattedRelayVersion],
+                @"os_version": @"macOS 12.7.6 (Monterey)",
                 @"commit": [HTTPServer relayGitCommit],
                 @"status": @"online",
-                @"endpoints": @[@"GET /status", @"GET /chats", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
+                @"endpoints": @[@"GET /status", @"GET /ping", @"GET /chats", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
                 @"spec_file": @"~/gateway.txt"
             } statusCode:200 clientFd:clientFd];
         } else if ([method isEqualToString:@"GET"] && [path isEqualToString:@"/chats"]) {
@@ -453,6 +456,7 @@
     
     NSMutableDictionary *response = [NSMutableDictionary dictionaryWithDictionary:@{
         @"status": @"success",
+        @"relay_version": [HTTPServer formattedRelayVersion],
         @"message_guid": message.guid ?: [NSNull null],
         @"chat_identifier": chat.chatIdentifier ?: [NSNull null],
         @"chat_guid": chat.guid ?: [NSNull null],
@@ -638,15 +642,22 @@
     IMAccount *activeIMessage = [mgr bestSendingAccount];
     
     NSString *commitStr = [HTTPServer relayGitCommit];
+    NSString *formattedVer = [HTTPServer formattedRelayVersion];
+    NSString *osVer = @"macOS 12.7.6 (Monterey)";
     
     NSDictionary *status = @{
         @"status": @"online",
+        @"ping": @"pong",
         @"daemon_name": @"crapple-relay-12",
-        @"version": @"macOS 12.7.6 (Monterey)",
-        @"relay_version": [HTTPServer formattedRelayVersion],
+        @"relay_version": formattedVer,
+        @"Relay version": formattedVer,
+        @"relay_version_string": formattedVer,
+        @"version": formattedVer,
+        @"os_version": osVer,
+        @"macos_version": osVer,
         @"commit": commitStr,
         @"git_commit": commitStr,
-        @"os_version": @"macOS 12.7.6 (Monterey)",
+        @"message": [NSString stringWithFormat:@"Relay is online. Relay version: %@ (%@)", formattedVer, osVer],
         @"security": @{
             @"bound_host": self.host,
             @"incoming_port": @(self.port),

@@ -1,4 +1,4 @@
-# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`) `v0.1.0`
+# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`) `v0.2.0`
 
 A high-performance, bidirectional native daemon designed specifically for macOS 12.7.x (Monterey). It links directly against Apple's private `IMCore`, `IMFoundation`, and `IMSharedUtilities` frameworks to provide a headless HTTP REST API and real-time webhook bridge for iMessage and SMS.
 
@@ -312,23 +312,26 @@ Sends a reaction to an existing message or removes a previously sent reaction.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/status` | Returns daemon health, OS version, relay version (`v0.1.0-<commit>`), active Apple ID / iMessage account status, listener IDs. |
+| `GET` / `POST` | `/status`, `/ping` | Returns daemon health, ping status, relay version (`v0.2.0-<commit>`), macOS version, active Apple ID / iMessage account status, listener IDs. |
 | `GET` | `/chats` | Returns all known chat conversations, identifiers, and participants. |
 | `GET` | `/accounts` | Lists registered accounts (iMessage and SMS) and connection state. |
 | `GET` | `/help` | Lists available endpoints, service metadata, and relay version. |
 | `POST`| `/retry-webhook` | Re-queries the newest incoming message from `chat.db` and dispatches it to the webhook. |
 | `POST`| `/test-webhook` | Dispatches a synthetic test payload to verify gateway connectivity. |
 
-#### Example: Daemon Status (`GET /status`)
+#### Example: Daemon Status / Ping (`GET /status` or `GET /ping`)
 ```json
 {
   "status": "online",
+  "ping": "pong",
   "daemon_name": "crapple-relay-12",
-  "version": "macOS 12.7.6 (Monterey)",
-  "relay_version": "v0.1.0-6377fced",
-  "commit": "6377fced1291793eaf41556a26d8bcefdca56002",
-  "git_commit": "6377fced1291793eaf41556a26d8bcefdca56002",
+  "version": "v0.2.0-b63e8029",
+  "relay_version": "v0.2.0-b63e8029",
+  "Relay version": "v0.2.0-b63e8029",
   "os_version": "macOS 12.7.6 (Monterey)",
+  "commit": "b63e8029c5a60d6e8b95f9679a8e3b5851900a8f",
+  "git_commit": "b63e8029c5a60d6e8b95f9679a8e3b5851900a8f",
+  "message": "Relay is online. Relay version: v0.2.0-b63e8029 (macOS 12.7.6 (Monterey))",
   "incoming_observer_active": true,
   "daemon_connected": true,
   "listener_id": "crapple-relay-listener",
