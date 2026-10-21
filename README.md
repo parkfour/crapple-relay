@@ -1,4 +1,4 @@
-# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`) `v0.2.0`
+# Native macOS 12 (Monterey) iMessage & SMS Relay Daemon (`crapple-relay-12`) `v0.2.1`
 
 A high-performance, bidirectional native daemon designed specifically for macOS 12.7.x (Monterey). It links directly against Apple's private `IMCore`, `IMFoundation`, and `IMSharedUtilities` frameworks to provide a headless HTTP REST API and real-time webhook bridge for iMessage and SMS.
 
@@ -35,10 +35,14 @@ This daemon acts as an agnostic middleware layer: it can connect to **any** gate
   - Supports removal of existing Tapbacks.
   - Automatic recipient and chat resolution from message GUIDs via SQLite `chat.db` queries.
   - Generates backward-compatibility fallback strings for non-iMessage recipients (e.g. `Loved “...”`).
-- **Real-Time Inbound Webhooks (`POST /receive-imessage`):**
+- **Real-Time Inbound Webhooks (`POST /receive-imessage`) with Persistent Retry Queue:**
   - Pushes incoming messages and media to your gateway listener in real-time.
   - Dual observation architecture: combines `IMChat` notification center events with a high-frequency SQLite WAL observer on `~/Library/Messages/chat.db` for 100% capture reliability.
+  - **Persistent Outbox & Backoff Retry:** Tracks `last_delivered_rowid` in `~/.crapple_relay_state.json`. If the gateway or VPS is down or undergoing an outage, messages are never dropped; they are queued and retried automatically in strict FIFO order with exponential backoff (3s to 30s) until HTTP 200/2xx confirmation is received.
   - Automatic base64 encoding and MIME detection of incoming media attachments.
+- **Remote Daemon Restart (`POST /restart`):**
+  - Allows the remote gateway or administrator to request a clean service restart over HTTP.
+  - Returns HTTP 200 JSON, flushes the socket, and triggers a clean process restart managed by `launchd`'s `KeepAlive`.
 - **Security & Logging:**
   - Enforces Bearer token authentication on all inbound REST endpoints.
   - Native system logging via Apple Unified Logging (`os_log`) and POSIX `syslog(3)` without creating disk log clutter.
@@ -328,11 +332,12 @@ Sends a reaction to an existing message or removes a previously sent reaction.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` / `POST` | `/status`, `/ping` | Returns daemon health, ping status, relay version (`v0.2.0-<commit>`), macOS version, active Apple ID / iMessage account status, listener IDs. |
+| `GET` / `POST` | `/status`, `/ping` | Returns daemon health, ping status, relay version (`v0.2.1-<commit>`), macOS version, active Apple ID / iMessage account status, delivery queue status, listener IDs. |
 | `GET` | `/chats` | Returns all known chat conversations, identifiers, and participants. |
 | `GET` | `/accounts` | Lists registered accounts (iMessage and SMS) and connection state. |
 | `GET` | `/help` | Lists available endpoints, service metadata, and relay version. |
-| `POST`| `/retry-webhook` | Re-queries the newest incoming message from `chat.db` and dispatches it to the webhook. |
+| `POST` / `GET` | `/restart`, `/api/restart` | Requests a graceful restart of the daemon process; `launchd` immediately respawns it. |
+| `POST`| `/retry-webhook` | Drains pending retry queue with backoff reset; if queue is empty, replays the newest incoming message from `chat.db`. Optionally accepts `{"since_rowid": N}` to rewind cursor. |
 | `POST`| `/test-webhook` | Dispatches a synthetic test payload to verify gateway connectivity. |
 
 #### Example: Daemon Status / Ping (`GET /status` or `GET /ping`)
@@ -341,14 +346,22 @@ Sends a reaction to an existing message or removes a previously sent reaction.
   "status": "online",
   "ping": "pong",
   "daemon_name": "crapple-relay-12",
-  "version": "v0.2.0-b63e8029",
-  "relay_version": "v0.2.0-b63e8029",
-  "Relay version": "v0.2.0-b63e8029",
+  "version": "v0.2.1-ed5e6447",
+  "relay_version": "v0.2.1-ed5e6447",
+  "Relay version": "v0.2.1-ed5e6447",
   "os_version": "macOS 12.7.6 (Monterey)",
-  "commit": "b63e8029c5a60d6e8b95f9679a8e3b5851900a8f",
-  "git_commit": "b63e8029c5a60d6e8b95f9679a8e3b5851900a8f",
-  "message": "Relay is online. Relay version: v0.2.0-b63e8029 (macOS 12.7.6 (Monterey))",
+  "commit": "ed5e6447fd9db80dd4d9e0583c2bfd641928abd6",
+  "git_commit": "ed5e6447fd9db80dd4d9e0583c2bfd641928abd6",
+  "message": "Relay is online. Relay version: v0.2.1-ed5e6447 (macOS 12.7.6 (Monterey))",
   "incoming_observer_active": true,
+  "delivery_queue": {
+    "last_delivered_rowid": 43,
+    "pending_count": 0,
+    "consecutive_failures": 0,
+    "in_flight": false,
+    "next_retry_in_seconds": 0,
+    "state_file": "/Users/username/.crapple_relay_state.json"
+  },
   "daemon_connected": true,
   "listener_id": "crapple-relay-listener",
   "security": {
@@ -368,23 +381,27 @@ Sends a reaction to an existing message or removes a previously sent reaction.
     "uniqueID": "35EE8FA3-77B6-4788-8A2E-EF97D27A775B"
   },
   "active_accounts_count": 2,
-  "total_chats": 3,
-  "accounts": [
-    {
-      "login": "E:user@example.com",
-      "service": "iMessage",
-      "connected": true,
-      "uniqueID": "35EE8FA3-77B6-4788-8A2E-EF97D27A775B"
-    },
-    {
-      "login": "E:",
-      "service": "SMS",
-      "connected": true,
-      "uniqueID": "6F913F03-BCF0-4ABE-A9E4-B95C06B4D1A4"
-    }
-  ]
+  "total_chats": 6
 }
 ```
+
+#### Remote Restart Request (`POST /restart`)
+```bash
+curl -X POST -H "Authorization: Bearer <TOKEN>" \
+     http://10.0.0.2:5569/restart
+```
+**Response:**
+```json
+{
+  "status": "restarting",
+  "message": "Relay daemon is restarting cleanly via launchd KeepAlive...",
+  "version": "v0.2.1-ed5e6447",
+  "relay_version": "v0.2.1-ed5e6447",
+  "commit": "ed5e6447fd9db80dd4d9e0583c2bfd641928abd6",
+  "timestamp": "2026-10-21T07:02:16-05:00"
+}
+```
+The server sends HTTP 200, cleanly flushes and closes the client connection, and calls `exit(0)`. Because the service is managed by `launchd` with `<key>KeepAlive</key><true/>`, macOS immediately restarts the daemon.
 
 ---
 

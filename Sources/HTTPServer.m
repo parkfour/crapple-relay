@@ -327,7 +327,10 @@
         } else if ([method isEqualToString:@"POST"] && [path isEqualToString:@"/test-webhook"]) {
             [self handleTestWebhookRequestWithBody:body clientFd:clientFd];
         } else if ([method isEqualToString:@"POST"] && ([path isEqualToString:@"/retry-webhook"] || [path isEqualToString:@"/api/retry-webhook"])) {
-            [self handleRetryWebhookRequest:clientFd];
+            [self handleRetryWebhookRequestWithBody:body clientFd:clientFd];
+        } else if (([method isEqualToString:@"POST"] || [method isEqualToString:@"GET"]) &&
+                   ([path isEqualToString:@"/restart"] || [path isEqualToString:@"/api/restart"])) {
+            [self handleRestartRequest:clientFd];
         } else if (([method isEqualToString:@"GET"] || [method isEqualToString:@"POST"]) &&
                    ([path isEqualToString:@"/status"] || [path isEqualToString:@"/"] || [path isEqualToString:@"/ping"] || [path isEqualToString:@"/health"] || [path isEqualToString:@"/api/status"] || [path isEqualToString:@"/api/ping"])) {
             [self handleStatusRequest:clientFd];
@@ -340,7 +343,7 @@
                 @"os_version": @"macOS 12.7.6 (Monterey)",
                 @"commit": [HTTPServer relayGitCommit],
                 @"status": @"online",
-                @"endpoints": @[@"GET /status", @"GET /ping", @"GET /chats", @"GET /chat", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /retry-webhook", @"POST /test-webhook"],
+                @"endpoints": @[@"GET /status", @"GET /ping", @"GET /chats", @"GET /chat", @"GET /accounts", @"GET /help", @"GET /info", @"POST /send", @"POST /react", @"POST /restart", @"POST /retry-webhook", @"POST /test-webhook"],
                 @"spec_file": @"~/gateway.txt"
             } statusCode:200 clientFd:clientFd];
         } else if ([method isEqualToString:@"GET"] && [path isEqualToString:@"/chats"]) {
@@ -671,6 +674,7 @@
             @"auth_configured": @(obs.webhookToken.length > 0)
         },
         @"incoming_observer_active": @(obs.isRunning),
+        @"delivery_queue": [obs queueStatusInfo],
         @"daemon_connected": @([dc isConnected]),
         @"listener_id": [dc _listenerID] ?: @"",
         @"imessage_account": activeIMessage ? @{
@@ -806,14 +810,82 @@
     } statusCode:200 clientFd:clientFd];
 }
 
-- (void)handleRetryWebhookRequest:(int)clientFd {
-    NSError *error = nil;
-    NSDictionary *result = [[MessageObserver sharedInstance] retryLastIncomingMessageWithError:&error];
-    if (result) {
-        [self sendJSONResponse:result statusCode:200 clientFd:clientFd];
-    } else {
-        [self sendJSONResponse:@{@"error": error.localizedDescription ?: @"Failed to retry incoming message"} statusCode:404 clientFd:clientFd];
+- (void)handleRetryWebhookRequestWithBody:(NSString *)body clientFd:(int)clientFd {
+    MessageObserver *obs = [MessageObserver sharedInstance];
+    
+    // Check if client provided custom since_rowid in JSON body
+    if (body && body.length > 0) {
+        NSData *bData = [body dataUsingEncoding:NSUTF8StringEncoding];
+        if (bData) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:bData options:0 error:nil];
+            if ([json isKindOfClass:[NSDictionary class]] && json[@"since_rowid"]) {
+                int64_t sinceRowID = [json[@"since_rowid"] longLongValue];
+                if (sinceRowID > 0) {
+                    NSLog(@"[+] Resetting last_delivered_rowid to %lld per request", sinceRowID - 1);
+                    [obs setDeliveredRowID:sinceRowID - 1];
+                    [self sendJSONResponse:@{
+                        @"status": @"reset_and_draining",
+                        @"message": [NSString stringWithFormat:@"Reset cursor to ROWID %lld and draining queue", sinceRowID - 1],
+                        @"queue": [obs queueStatusInfo]
+                    } statusCode:200 clientFd:clientFd];
+                    return;
+                }
+            }
+        }
     }
+    
+    NSUInteger pending = [obs pendingMessageCount];
+    if (pending > 0) {
+        NSLog(@"[+] /retry-webhook called with %lu pending messages. Resetting backoff and draining queue...", (unsigned long)pending);
+        [obs resetBackoffAndDrainQueue];
+        [self sendJSONResponse:@{
+            @"status": @"draining_queue",
+            @"message": [NSString stringWithFormat:@"Reset backoff and draining %lu pending message(s)", (unsigned long)pending],
+            @"queue": [obs queueStatusInfo]
+        } statusCode:200 clientFd:clientFd];
+        return;
+    }
+    
+    NSLog(@"[+] /retry-webhook called with 0 pending messages. Replaying latest incoming message...");
+    NSError *error = nil;
+    NSDictionary *result = [obs retryLastIncomingMessageWithError:&error];
+    if (result) {
+        NSMutableDictionary *mResult = [result mutableCopy];
+        mResult[@"queue"] = [obs queueStatusInfo];
+        [self sendJSONResponse:mResult statusCode:200 clientFd:clientFd];
+    } else {
+        [self sendJSONResponse:@{@"error": error.localizedDescription ?: @"Failed to retry incoming message", @"queue": [obs queueStatusInfo]} statusCode:404 clientFd:clientFd];
+    }
+}
+
+- (void)handleRestartRequest:(int)clientFd {
+    NSLog(@"[+] Inbound request to restart relay service.");
+    NSString *commitStr = [HTTPServer relayGitCommit];
+    NSString *formattedVer = [HTTPServer formattedRelayVersion];
+    
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZZZZZ";
+    NSString *nowStr = [formatter stringFromDate:[NSDate date]];
+    
+    NSDictionary *resp = @{
+        @"status": @"restarting",
+        @"message": @"Relay daemon is restarting cleanly via launchd KeepAlive...",
+        @"version": formattedVer,
+        @"relay_version": formattedVer,
+        @"commit": commitStr,
+        @"timestamp": nowStr
+    };
+    
+    [self sendJSONResponse:resp statusCode:200 clientFd:clientFd];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        NSLog(@"[+] Graceful shutdown initiating now. launchd KeepAlive will respawn the process.");
+        [self stop];
+        [[MessageObserver sharedInstance] stop];
+        RelayLogClose();
+        exit(0);
+    });
 }
 
 #pragma mark - HTTP Utilities
